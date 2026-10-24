@@ -10,7 +10,7 @@ void desimage_set(DESImage *framebuffer, int x, int y, DESColor *c) {
     {
         return;
     }
-    memcpy(framebuffer->imageData.data+(x+y*framebuffer->width)*framebuffer->bpp, c->bgra, framebuffer->bpp);
+    memcpy(framebuffer->imageData.data + (x+y*framebuffer->width)*framebuffer->bpp, c->bgra, framebuffer->bpp);
 }
 
 bool desimage_unload_rle_data(DESImage *framebuffer, FILE *out) {

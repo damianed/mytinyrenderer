@@ -1,9 +1,9 @@
 PLATFORM_COMPILE_FILES="main.c des_image.c"
-PLATFORM_LINKER_FLAGS=""
+PLATFORM_LINKER_FLAGS="-lm"
 
 GAME_COMPILE_FILES=""
 
-SHARED_COMP_FLAGS="-DDEBUG -ggdb -Wall -Wextra -Werror -std=gnu99 -Wvla -Wno-unused-parameter"
+SHARED_COMP_FLAGS="-DDEBUG -ggdb -Wall -Wextra -Werror -std=gnu99 -Wvla -Wno-unused-parameter -Wno-unused-variable"
 
 #TODO: add a project path as -D var so I can know where to get the game.so
 mkdir -p build
