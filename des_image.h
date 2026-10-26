@@ -13,6 +13,18 @@ typedef struct {
 } DESColor;
 
 typedef struct {
+    float x;
+    float y;
+    float z;
+} ObjVertex;
+
+typedef struct {
+    ObjVertex *v1;
+    ObjVertex *v2;
+    ObjVertex *v3;
+} ObjFace;
+
+typedef struct {
     uint8_t *data;
     int      size;
 } DESImageData;
