@@ -1,8 +1,8 @@
 #include <stdio.h>
-#include "des_image.h"
+#include "tga_image.h"
 #include <string.h>
 
-void desimage_set(DESImage *framebuffer, int x, int y, DESColor *c) {
+void tgaimage_set(TGAImage *framebuffer, int x, int y, TGAColor *c) {
     if (x < 0 || y < 0 ||
             x >= framebuffer->width ||
             y >= framebuffer->height
@@ -13,7 +13,7 @@ void desimage_set(DESImage *framebuffer, int x, int y, DESColor *c) {
     memcpy(framebuffer->imageData.data + (x+y*framebuffer->width)*framebuffer->bpp, c->bgra, framebuffer->bpp);
 }
 
-bool desimage_unload_rle_data(DESImage *framebuffer, FILE *out) {
+bool tgaimage_unload_rle_data(TGAImage *framebuffer, FILE *out) {
     uint8_t max_chunk_length = 128;
     size_t npixels = framebuffer->width*framebuffer->height;
     size_t curpix = 0;
@@ -49,7 +49,7 @@ bool desimage_unload_rle_data(DESImage *framebuffer, FILE *out) {
 }
 
 
-bool desimage_write_tga_file(DESImage *framebuffer, char *path) {
+bool tgaimage_write_tga_file(TGAImage *framebuffer, char *path) {
     static uint8_t developer_area_ref[4] = {0, 0, 0, 0};
     static uint8_t extension_area_ref[4] = {0, 0, 0, 0};
     static uint8_t footer[18] = {'T','R','U','E','V','I','S','I','O','N','-','X','F','I','L','E','.','\0'};
@@ -60,7 +60,7 @@ bool desimage_write_tga_file(DESImage *framebuffer, char *path) {
         fprintf(stderr, "Can't open file %s\n", path);
         return false;
     }
-    DESHeader header = {};
+    TGAHeader header = {};
     header.bitsperpixel = framebuffer->bpp<<3;
     header.width        = framebuffer->width;
     header.height       = framebuffer->height;
@@ -76,7 +76,7 @@ bool desimage_write_tga_file(DESImage *framebuffer, char *path) {
     //    out.write(reinterpret_cast<const char *>(data.data()), w*h*bpp);
     //    if (!out.good()) goto err;
     //} else if (!unload_rle_data(out)) goto err;
-    if (!desimage_unload_rle_data(framebuffer, out)) goto err;
+    if (!tgaimage_unload_rle_data(framebuffer, out)) goto err;
 
     written = fwrite(&developer_area_ref, sizeof(developer_area_ref), 1, out);
     if (written != 1) goto err;

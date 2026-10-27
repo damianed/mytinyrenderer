@@ -5,16 +5,16 @@
 #include <time.h>
 #include <string.h>
 #include <ctype.h>
-#include "des_image.h"
+#include "tga_image.h"
 
 #define WIDTH  1920
 #define HEIGHT 1080
 
-static DESColor WHITE   = {{255, 255, 255, 255}}; // attention, BGRA order
-static DESColor GREEN   = {{  0, 255,   0, 255}};
-static DESColor RED     = {{  0,   0, 255, 255}};
-static DESColor BLUE    = {{255, 128,  64, 255}};
-static DESColor YELLOW  = {{  0, 200, 255, 255}};
+static TGAColor WHITE   = {{255, 255, 255, 255}}; // attention, BGRA order
+static TGAColor GREEN   = {{  0, 255,   0, 255}};
+static TGAColor RED     = {{  0,   0, 255, 255}};
+static TGAColor BLUE    = {{255, 128,  64, 255}};
+static TGAColor YELLOW  = {{  0, 200, 255, 255}};
 
 void swapInts(int *a, int *b) {
     int tmp = *a;
@@ -22,7 +22,7 @@ void swapInts(int *a, int *b) {
     *b = tmp;
 }
 
-void drawLine(DESImage *framebuffer, int ax, int ay, int bx, int by, DESColor *color) {
+void drawLine(TGAImage *framebuffer, int ax, int ay, int bx, int by, TGAColor *color) {
     bool steep = abs(ax-bx) < abs(ay-by);
     if (steep) { // if the line is steep, we transpose the image
         swapInts(&ax, &ay);
@@ -38,9 +38,9 @@ void drawLine(DESImage *framebuffer, int ax, int ay, int bx, int by, DESColor *c
     int ierror = 0;
     for (int x = ax; x <= bx; x++) {
         if (steep) { // if transposed, de−transpose
-            desimage_set(framebuffer, y, x, color);
+            tgaimage_set(framebuffer, y, x, color);
         } else {
-            desimage_set(framebuffer, x, y, color);
+            tgaimage_set(framebuffer, x, y, color);
         }
         ierror += 2 * abs(by-ay);
         y += (by > ay ? 1 : -1) * (ierror > bx - ax);
@@ -52,7 +52,7 @@ static inline float toCenterScreen(float value, float zvalue, int centerTo) {
     return ((value / (zvalue + 3.5)) * HEIGHT) + centerTo/2.0f;
 }
 
-void drawLineVert(DESImage *framebuffer, ObjVertex *v1, ObjVertex *v2, DESColor *color) {
+void drawLineVert(TGAImage *framebuffer, ObjVertex *v1, ObjVertex *v2, TGAColor *color) {
     drawLine(
             framebuffer,
             toCenterScreen(v1->x, v1->z, WIDTH),
@@ -63,50 +63,25 @@ void drawLineVert(DESImage *framebuffer, ObjVertex *v1, ObjVertex *v2, DESColor 
     );
 }
 
-int main() {
-#define bpp    3
-
-    int data_size = WIDTH * HEIGHT * bpp;
-    uint8_t data[WIDTH * HEIGHT * bpp] = {0};
-    DESImageData imageData = {
-        data,
-        data_size,
-    };
-
-    DESImage framebuffer = {
-        imageData,
-        RGB,
-        WIDTH,
-        HEIGHT,
-    };
-
-#define MAX_VERTICE_COUNT 5000
-    static ObjVertex vertices[MAX_VERTICE_COUNT];
-
-#define MAX_FACE_COUNT 10000
-    static ObjFace faces[MAX_FACE_COUNT];
-
-    char *filename = "./obj/diablo3_pose/diablo3_pose.obj";
+bool loadObjModelFromFile(char *filename, ObjModel *model) {
     FILE *file = fopen(filename, "r");
     if (!file) {
         fprintf(stderr, "Failed to open file %s\n", filename);
-        return 1;
+        return false;
     }
 
 #define MAX_LINE_LEN 255
     char buffer[MAX_LINE_LEN] = {0};
-    int curr_vert_index = 0;
-    int curr_face_index = 0;
     while (fgets(buffer, MAX_LINE_LEN, file) != NULL) {
         // Parse vertice
         if (strncmp(buffer, "v ", 2) == 0) {
             char *start = &buffer[2];
             char *endptr  = NULL;
             //TODO: verify the parsing is successful
-            vertices[curr_vert_index].x = strtof(start, &endptr);
-            vertices[curr_vert_index].y = strtof(endptr, &endptr);
-            vertices[curr_vert_index].z = strtof(endptr, &endptr);
-            curr_vert_index++;
+            model->vertices[model->vertex_count].x = strtof(start, &endptr);
+            model->vertices[model->vertex_count].y = strtof(endptr, &endptr);
+            model->vertices[model->vertex_count].z = strtof(endptr, &endptr);
+            model->vertex_count++;
         }
         // Parse face
         if (strncmp(buffer, "f ", 2) == 0) {
@@ -116,25 +91,58 @@ int main() {
             int index2 = atoi(start);
             while (!isspace(*start++)) {}
             int index3 = atoi(start);
-            faces[curr_face_index].v1 = &vertices[index1 - 1];
-            faces[curr_face_index].v2 = &vertices[index2 - 1];
-            faces[curr_face_index].v3 = &vertices[index3 - 1];
-            curr_face_index++;
+            model->faces[model->faces_count].v1_index = index1 - 1;
+            model->faces[model->faces_count].v2_index = index2 - 1;
+            model->faces[model->faces_count].v3_index = index3 - 1;
+            model->faces_count++;
         }
     }
 
-    for (int i = 0; i < curr_face_index; i++) {
-        drawLineVert(&framebuffer, faces[i].v1, faces[i].v2, &RED);
-        drawLineVert(&framebuffer, faces[i].v2, faces[i].v3, &RED);
-        drawLineVert(&framebuffer, faces[i].v3, faces[i].v1, &RED);
+    return true;
+}
+
+void drawObjModel(TGAImage *framebuffer, ObjModel *model) {
+    for (int i = 0; i < model->faces_count; i++) {
+        ObjVertex *v1 = &model->vertices[model->faces[i].v1_index];
+        ObjVertex *v2 = &model->vertices[model->faces[i].v2_index];
+        ObjVertex *v3 = &model->vertices[model->faces[i].v3_index];
+
+        drawLineVert(framebuffer, v1, v2, &RED);
+        drawLineVert(framebuffer, v2, v3, &RED);
+        drawLineVert(framebuffer, v3, v1, &RED);
     }
-    for (int i = 0; i < curr_vert_index; i++) {
-        desimage_set(
-                &framebuffer,
-                toCenterScreen(vertices[i].x, vertices[i].z, WIDTH),
-                toCenterScreen(vertices[i].y, vertices[i].z, HEIGHT),
-                &WHITE
+
+    for (int i = 0; i < model->vertex_count; i++) {
+        tgaimage_set(
+            framebuffer,
+            toCenterScreen(model->vertices[i].x, model->vertices[i].z, WIDTH),
+            toCenterScreen(model->vertices[i].y, model->vertices[i].z, HEIGHT),
+            &WHITE
         );
+    }
+}
+
+int main() {
+#define bpp    3
+
+    int data_size = WIDTH * HEIGHT * bpp;
+    uint8_t data[WIDTH * HEIGHT * bpp] = {0};
+    TGAImageData imageData = {
+        data,
+        data_size,
+    };
+
+    TGAImage framebuffer = {
+        imageData,
+        RGB,
+        WIDTH,
+        HEIGHT,
+    };
+
+    static ObjModel model;
+    char *filename = "./obj/diablo3_pose/diablo3_pose.obj";
+    if (loadObjModelFromFile(filename, &model)) {
+        drawObjModel(&framebuffer, &model);
     }
 
     //int ax =  7, ay =  3;
@@ -146,18 +154,18 @@ int main() {
     //drawLine(&framebuffer, cx, cy, ax, ay, &YELLOW);
     //drawLine(&framebuffer, ax, ay, cx, cy, &RED);
 
-    //desimage_set(&framebuffer, ax, ay, &WHITE);
-    //desimage_set(&framebuffer, bx, by, &WHITE);
-    //desimage_set(&framebuffer, cx, cy, &WHITE);
+    //tgaimage_set(&framebuffer, ax, ay, &WHITE);
+    //tgaimage_set(&framebuffer, bx, by, &WHITE);
+    //tgaimage_set(&framebuffer, cx, cy, &WHITE);
 
     //perf measuring
     //srand(time(NULL));
     //for (int i=0; i<(1<<24); i++) {
     //    int ax = rand()%WIDTH, ay = rand()%HEIGHT;
     //    int bx = rand()%WIDTH, by = rand()%HEIGHT;
-    //    drawLine(&framebuffer, ax, ay, bx, by, &(DESColor){{ rand()%255, rand()%255, rand()%255, rand()%255 }});
+    //    drawLine(&framebuffer, ax, ay, bx, by, &(TGAColor){{ rand()%255, rand()%255, rand()%255, rand()%255 }});
     //}
 
-    desimage_write_tga_file(&framebuffer, "framebuffer.tga");
+    tgaimage_write_tga_file(&framebuffer, "framebuffer.tga");
     return 0;
 }

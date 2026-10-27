@@ -10,7 +10,7 @@ typedef enum {
 typedef struct {
     uint8_t bgra[4];
     //uint8_t bytespp;
-} DESColor;
+} TGAColor;
 
 typedef struct {
     float x;
@@ -19,22 +19,31 @@ typedef struct {
 } ObjVertex;
 
 typedef struct {
-    ObjVertex *v1;
-    ObjVertex *v2;
-    ObjVertex *v3;
+    int v1_index;
+    int v2_index;
+    int v3_index;
 } ObjFace;
+
+#define MAX_VERTICE_COUNT 5000
+#define MAX_FACE_COUNT    10000
+typedef struct {
+    ObjVertex vertices[MAX_VERTICE_COUNT];
+    ObjFace   faces[MAX_FACE_COUNT];
+    int       vertex_count;
+    int       faces_count;
+} ObjModel;
 
 typedef struct {
     uint8_t *data;
     int      size;
-} DESImageData;
+} TGAImageData;
 
 typedef struct {
-    DESImageData    imageData;
+    TGAImageData    imageData;
     BytesPerPixel   bpp;
     int             width;
     int             height;
-} DESImage;
+} TGAImage;
 
 #pragma pack(push, 1)
 typedef struct {
@@ -50,9 +59,9 @@ typedef struct {
     uint16_t height;
     uint8_t  bitsperpixel;
     uint8_t  imagedescriptor;
-} DESHeader;
+} TGAHeader;
 #pragma pack(pop)
 
-void desimage_set(DESImage *framebuffer, int x, int y, DESColor *color);
+void tgaimage_set(TGAImage *framebuffer, int x, int y, TGAColor *color);
 
-bool desimage_write_tga_file(DESImage *framebuffer, char *image_path);
+bool tgaimage_write_tga_file(TGAImage *framebuffer, char *image_path);
