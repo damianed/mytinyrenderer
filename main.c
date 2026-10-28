@@ -7,14 +7,19 @@
 #include <ctype.h>
 #include "tga_image.h"
 
-#define WIDTH  1920
-#define HEIGHT 1080
+#define WIDTH  128
+#define HEIGHT 128
 
 static TGAColor WHITE   = {{255, 255, 255, 255}}; // attention, BGRA order
 static TGAColor GREEN   = {{  0, 255,   0, 255}};
 static TGAColor RED     = {{  0,   0, 255, 255}};
 static TGAColor BLUE    = {{255, 128,  64, 255}};
 static TGAColor YELLOW  = {{  0, 200, 255, 255}};
+
+typedef struct {
+    int x;
+    int y;
+} Coords;
 
 void swapInts(int *a, int *b) {
     int tmp = *a;
@@ -122,6 +127,91 @@ void drawObjModel(TGAImage *framebuffer, ObjModel *model) {
     }
 }
 
+void drawTriangle(TGAImage *framebuffer, int ax, int ay, int bx, int by, int cx, int cy, TGAColor *color) {
+    int a1x = ax;
+    int b1x = bx;
+    int a1y = ay;
+    int b1y = by;
+
+    int a2x = bx;
+    int b2x = cx;
+    int a2y = by;
+    int b2y = cy;
+    bool steep  = abs(a1x-b1x) < abs(a1y-b1y);
+    bool steep2 = abs(a2x-b2x) < abs(a2y-b2y);
+    if (steep) { // if the line is steep, we transpose the image
+        swapInts(&a1x, &a1y);
+        swapInts(&b1x, &b1y);
+    }
+
+    if (a1x > b1x) { // make it left−to−right
+        swapInts(&a1x, &b1x);
+        swapInts(&a1y, &b1y);
+    }
+
+    if (steep2) {
+        swapInts(&a2x, &a2y);
+        swapInts(&b2x, &b2y);
+    }
+
+    if (a2x > b2x) { // make it left−to−right
+        swapInts(&a2x, &b2x);
+        swapInts(&a2y, &b2y);
+    }
+
+    int y = a1y;
+    int ierror = 0;
+
+    //TODO: this should be what ever is biggest between W or H
+    Coords steps1[WIDTH] = {0};
+    int steps1_count = 0;
+    for (int x = a1x; x <= b1x; x++) {
+        if (steep) { // if transposed, de−transpose
+            tgaimage_set(framebuffer, y, x, color);
+            steps1[steps1_count] = (Coords) {y, x};
+        } else {
+            tgaimage_set(framebuffer, x, y, color);
+            steps1[steps1_count] = (Coords) {x, y};
+        }
+        steps1_count++;
+        ierror += 2 * abs(b1y-a1y);
+        y += (b1y > a1y ? 1 : -1) * (ierror > b1x - a1x);
+        ierror -= 2 * (b1x-a1x)   * (ierror > b1x - a1x);
+    }
+
+    y = a2y;
+    ierror = 0;
+
+    //TODO: this should be what ever is biggest between W or H
+    Coords steps2[WIDTH] = {0};
+    int steps2_count = 0;
+    for (int x = a2x; x <= b2x; x++) {
+        if (steep2) { // if transposed, de−transpose
+            tgaimage_set(framebuffer, y, x, color);
+            steps2[steps2_count] = (Coords) {y, x};
+        } else {
+            tgaimage_set(framebuffer, x, y, color);
+            steps2[steps2_count] = (Coords) {x, y};
+        }
+        steps2_count++;
+        ierror += 2 * abs(b2y-a2y);
+        y += (b2y > a2y ? 1 : -1) * (ierror > b2x - a2x);
+        ierror -= 2 * (b2x-a2x)   * (ierror > b2x - a2x);
+    }
+
+    //TODO: just testing this should be >= 0 but need to think about how to handle it
+    while (steps1_count > 0 || steps2_count > 0) {
+        if (steps1_count > 0) {
+            steps1_count--;
+        }
+        if (steps2_count > 0) {
+            steps2_count--;
+        }
+
+        drawLine(framebuffer, steps1[steps1_count].x, steps1[steps1_count].y, steps2[steps2_count].x, steps2[steps2_count].y, color);
+    }
+}
+
 int main() {
 #define bpp    3
 
@@ -139,11 +229,15 @@ int main() {
         HEIGHT,
     };
 
-    static ObjModel model;
-    char *filename = "./obj/diablo3_pose/diablo3_pose.obj";
-    if (loadObjModelFromFile(filename, &model)) {
-        drawObjModel(&framebuffer, &model);
-    }
+    //static ObjModel model;
+    //char *filename = "./obj/diablo3_pose/diablo3_pose.obj";
+    //if (loadObjModelFromFile(filename, &model)) {
+    //    drawObjModel(&framebuffer, &model);
+    //}
+
+    drawTriangle(&framebuffer,   7, 45, 35, 100, 45,  60, &RED);
+    drawTriangle(&framebuffer, 120, 35, 90,   5, 45, 110, &WHITE);
+    drawTriangle(&framebuffer, 115, 83, 80,  90, 85, 120, &GREEN);
 
     //int ax =  7, ay =  3;
     //int bx = 12, by = 37;

@@ -3,7 +3,7 @@ PLATFORM_LINKER_FLAGS="-lm"
 
 GAME_COMPILE_FILES=""
 
-SHARED_COMP_FLAGS="-DDEBUG -ggdb -Wall -Wextra -Werror -std=gnu99 -Wvla -Wno-unused-parameter -Wno-unused-variable"
+SHARED_COMP_FLAGS="-DDEBUG -ggdb -Wall -Wextra -Werror -std=gnu99 -Wvla -Wno-unused-parameter -Wno-unused-variable -Wno-unused-but-set-variable"
 
 #TODO: add a project path as -D var so I can know where to get the game.so
 mkdir -p build
