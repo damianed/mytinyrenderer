@@ -106,15 +106,155 @@ bool loadObjModelFromFile(char *filename, ObjModel *model) {
     return true;
 }
 
+void drawTriangle(TGAImage *framebuffer, int ax, int ay, int bx, int by, int cx, int cy, TGAColor *color) {
+    if (ay > by) {
+        swapInts(&ax, &bx);
+        swapInts(&ay, &by);
+    }
+    if (ay > cy) {
+        swapInts(&ax, &cx);
+        swapInts(&ay, &cy);
+    }
+    if (by > cy) {
+        swapInts(&bx, &cx);
+        swapInts(&by, &cy);
+    }
+
+    int total_height = cy - ay;
+
+    if (ay != by) {  // if the bottom half is not degenerate (I don't understand what this means)
+        int segment_height = by - ay;
+        for (int y = ay; y <= by; y++) {
+            int x1 = ax + ((cx - ax) * (y - ay)) / total_height;
+            int x2 = ax + ((bx - ax) * (y - ay)) / segment_height;
+            if (x1 > x2) {
+                swapInts(&x1, &x2);
+            }
+            for (int x = x1; x <= x2; x++) {
+                tgaimage_set(framebuffer, x, y, color);
+            }
+            //tgaimage_set(framebuffer, x1, y, &RED);
+            //tgaimage_set(framebuffer, x2, y, &GREEN);
+        }
+    }
+    if (by != cy) {  // if the upper half is not degenerate (I don't understand what this means)
+        int segment_height = cy - by;
+        for (int y = by; y <= cy; y++) {
+            int x1 = ax + ((cx - ax) * (y - ay)) / total_height;
+            int x2 = bx + ((cx - bx) * (y - by)) / segment_height;
+            if (x1 > x2) {
+                swapInts(&x1, &x2);
+            }
+            for (int x = x1; x <= x2; x++) {
+                tgaimage_set(framebuffer, x, y, color);
+            }
+        }
+    }
+}
+
+void find_bounding_box(const Coords *points, const int points_len, Coords *out_points) {
+    int min_y = points[0].y;
+    int max_y = points[0].y;
+    int min_x = points[0].x;
+    int max_x = points[0].x;
+    for (int i = 1; i < points_len; i++) {
+        if (points[i].y < min_y) {
+            min_y = points[i].y;
+        }
+        if (points[i].y > max_y) {
+            max_y = points[i].y;
+        }
+
+        if (points[i].x < min_x) {
+            min_x = points[i].x;
+        }
+        if (points[i].x > max_x) {
+            max_x = points[i].x;
+        }
+    }
+
+    out_points[0].y = min_y;
+    out_points[0].x = min_x;
+    out_points[1].y = max_y;
+    out_points[1].x = max_x;
+}
+
+double signedTriangleArea(const Coords *a, const Coords *b, const Coords *c) {
+     return 0.5 * ((b->y - a->y)*(b->x + a->x) + (c->y - b->y)*(c->x + b->x) + (a->y - c->y)*(a->x + c->x));
+}
+
+void drawTriangle2(TGAImage *framebuffer, int ax, int ay, int bx, int by, int cx, int cy, TGAColor *color) {
+#define POINTS_LEN 3
+    Coords points[POINTS_LEN] = {
+        {ax, ay},
+        {bx, by},
+        {cx, cy},
+    };
+
+    double total_area = signedTriangleArea(&points[0], &points[1], &points[2]);
+
+    Coords box_points[2];
+    find_bounding_box(points, POINTS_LEN, box_points);
+
+    for (int y = box_points[0].y; y <= box_points[1].y; y++) {
+        for (int x = box_points[0].x; x <= box_points[1].x; x++) {
+            Coords p = {x, y};
+            double alpha = signedTriangleArea(&p, &points[1], &points[2]) / total_area;
+            double beta  = signedTriangleArea(&p, &points[2], &points[0]) / total_area;
+            double gamma = signedTriangleArea(&p, &points[0], &points[1]) / total_area;
+            if (alpha < 0 || beta < 0 || gamma < 0) {
+                continue;
+            }
+
+            tgaimage_set(framebuffer, x, y, color);
+        }
+    }
+}
+
+TGAColor getRandColor() {
+    const int i = rand() % 4;
+    switch (i) {
+        case 0: {
+            return WHITE;
+        } break;
+        case 1: {
+            return GREEN;
+        } break;
+        case 2: {
+            return RED;
+        } break;
+        case 3: {
+            return BLUE;
+        } break;
+        case 4: {
+            return YELLOW;
+        } break;
+    }
+
+    return WHITE;
+}
+
 void drawObjModel(TGAImage *framebuffer, ObjModel *model) {
     for (int i = 0; i < model->faces_count; i++) {
         ObjVertex *v1 = &model->vertices[model->faces[i].v1_index];
         ObjVertex *v2 = &model->vertices[model->faces[i].v2_index];
         ObjVertex *v3 = &model->vertices[model->faces[i].v3_index];
 
-        drawLineVert(framebuffer, v1, v2, &RED);
-        drawLineVert(framebuffer, v2, v3, &RED);
-        drawLineVert(framebuffer, v3, v1, &RED);
+        TGAColor randColor = getRandColor();
+        drawTriangle2(
+            framebuffer,
+            toCenterScreen(v1->x, v1->z, WIDTH),
+            toCenterScreen(v1->y, v1->z, HEIGHT),
+            toCenterScreen(v2->x, v2->z, WIDTH),
+            toCenterScreen(v2->y, v2->z, HEIGHT),
+            toCenterScreen(v3->x, v3->z, WIDTH),
+            toCenterScreen(v3->y, v3->z, HEIGHT),
+            &randColor
+        );
+
+        //drawLineVert(framebuffer, v1, v2, &RED);
+        //drawLineVert(framebuffer, v2, v3, &RED);
+        //drawLineVert(framebuffer, v3, v1, &RED);
     }
 
     for (int i = 0; i < model->vertex_count; i++) {
@@ -127,90 +267,6 @@ void drawObjModel(TGAImage *framebuffer, ObjModel *model) {
     }
 }
 
-void drawTriangle(TGAImage *framebuffer, int ax, int ay, int bx, int by, int cx, int cy, TGAColor *color) {
-    int a1x = ax;
-    int b1x = bx;
-    int a1y = ay;
-    int b1y = by;
-
-    int a2x = bx;
-    int b2x = cx;
-    int a2y = by;
-    int b2y = cy;
-    bool steep  = abs(a1x-b1x) < abs(a1y-b1y);
-    bool steep2 = abs(a2x-b2x) < abs(a2y-b2y);
-    if (steep) { // if the line is steep, we transpose the image
-        swapInts(&a1x, &a1y);
-        swapInts(&b1x, &b1y);
-    }
-
-    if (a1x > b1x) { // make it left−to−right
-        swapInts(&a1x, &b1x);
-        swapInts(&a1y, &b1y);
-    }
-
-    if (steep2) {
-        swapInts(&a2x, &a2y);
-        swapInts(&b2x, &b2y);
-    }
-
-    if (a2x > b2x) { // make it left−to−right
-        swapInts(&a2x, &b2x);
-        swapInts(&a2y, &b2y);
-    }
-
-    int y = a1y;
-    int ierror = 0;
-
-    //TODO: this should be what ever is biggest between W or H
-    Coords steps1[WIDTH] = {0};
-    int steps1_count = 0;
-    for (int x = a1x; x <= b1x; x++) {
-        if (steep) { // if transposed, de−transpose
-            tgaimage_set(framebuffer, y, x, color);
-            steps1[steps1_count] = (Coords) {y, x};
-        } else {
-            tgaimage_set(framebuffer, x, y, color);
-            steps1[steps1_count] = (Coords) {x, y};
-        }
-        steps1_count++;
-        ierror += 2 * abs(b1y-a1y);
-        y += (b1y > a1y ? 1 : -1) * (ierror > b1x - a1x);
-        ierror -= 2 * (b1x-a1x)   * (ierror > b1x - a1x);
-    }
-
-    y = a2y;
-    ierror = 0;
-
-    //TODO: this should be what ever is biggest between W or H
-    Coords steps2[WIDTH] = {0};
-    int steps2_count = 0;
-    for (int x = a2x; x <= b2x; x++) {
-        if (steep2) { // if transposed, de−transpose
-            tgaimage_set(framebuffer, y, x, color);
-            steps2[steps2_count] = (Coords) {y, x};
-        } else {
-            tgaimage_set(framebuffer, x, y, color);
-            steps2[steps2_count] = (Coords) {x, y};
-        }
-        steps2_count++;
-        ierror += 2 * abs(b2y-a2y);
-        y += (b2y > a2y ? 1 : -1) * (ierror > b2x - a2x);
-        ierror -= 2 * (b2x-a2x)   * (ierror > b2x - a2x);
-    }
-
-    //TODO: just testing this should be >= 0 but need to think about how to handle it
-    while (steps1_count > 0 || steps2_count > 0) {
-        if (steps1_count > 0) {
-            steps1_count--;
-        }
-        if (steps2_count > 0) {
-            steps2_count--;
-        }
-
-        drawLine(framebuffer, steps1[steps1_count].x, steps1[steps1_count].y, steps2[steps2_count].x, steps2[steps2_count].y, color);
-    }
-}
 
 int main() {
 #define bpp    3
@@ -229,15 +285,15 @@ int main() {
         HEIGHT,
     };
 
-    //static ObjModel model;
-    //char *filename = "./obj/diablo3_pose/diablo3_pose.obj";
-    //if (loadObjModelFromFile(filename, &model)) {
-    //    drawObjModel(&framebuffer, &model);
-    //}
+    static ObjModel model;
+    char *filename = "./obj/diablo3_pose/diablo3_pose.obj";
+    if (loadObjModelFromFile(filename, &model)) {
+        drawObjModel(&framebuffer, &model);
+    }
 
-    drawTriangle(&framebuffer,   7, 45, 35, 100, 45,  60, &RED);
-    drawTriangle(&framebuffer, 120, 35, 90,   5, 45, 110, &WHITE);
-    drawTriangle(&framebuffer, 115, 83, 80,  90, 85, 120, &GREEN);
+    //drawTriangle2(&framebuffer,   7, 45, 35, 100, 45,  60, &RED);
+    //drawTriangle2(&framebuffer, 120, 35, 90,   5, 45, 110, &WHITE);
+    //drawTriangle2(&framebuffer, 115, 83, 80,  90, 85, 120, &GREEN);
 
     //int ax =  7, ay =  3;
     //int bx = 12, by = 37;
