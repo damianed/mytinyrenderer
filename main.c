@@ -7,8 +7,8 @@
 #include <ctype.h>
 #include "tga_image.h"
 
-#define WIDTH  128
-#define HEIGHT 128
+#define WIDTH  1080
+#define HEIGHT 1080
 
 static TGAColor WHITE   = {{255, 255, 255, 255}}; // attention, BGRA order
 static TGAColor GREEN   = {{  0, 255,   0, 255}};
@@ -106,53 +106,7 @@ bool loadObjModelFromFile(char *filename, ObjModel *model) {
     return true;
 }
 
-void drawTriangle(TGAImage *framebuffer, int ax, int ay, int bx, int by, int cx, int cy, TGAColor *color) {
-    if (ay > by) {
-        swapInts(&ax, &bx);
-        swapInts(&ay, &by);
-    }
-    if (ay > cy) {
-        swapInts(&ax, &cx);
-        swapInts(&ay, &cy);
-    }
-    if (by > cy) {
-        swapInts(&bx, &cx);
-        swapInts(&by, &cy);
-    }
-
-    int total_height = cy - ay;
-
-    if (ay != by) {  // if the bottom half is not degenerate (I don't understand what this means)
-        int segment_height = by - ay;
-        for (int y = ay; y <= by; y++) {
-            int x1 = ax + ((cx - ax) * (y - ay)) / total_height;
-            int x2 = ax + ((bx - ax) * (y - ay)) / segment_height;
-            if (x1 > x2) {
-                swapInts(&x1, &x2);
-            }
-            for (int x = x1; x <= x2; x++) {
-                tgaimage_set(framebuffer, x, y, color);
-            }
-            //tgaimage_set(framebuffer, x1, y, &RED);
-            //tgaimage_set(framebuffer, x2, y, &GREEN);
-        }
-    }
-    if (by != cy) {  // if the upper half is not degenerate (I don't understand what this means)
-        int segment_height = cy - by;
-        for (int y = by; y <= cy; y++) {
-            int x1 = ax + ((cx - ax) * (y - ay)) / total_height;
-            int x2 = bx + ((cx - bx) * (y - by)) / segment_height;
-            if (x1 > x2) {
-                swapInts(&x1, &x2);
-            }
-            for (int x = x1; x <= x2; x++) {
-                tgaimage_set(framebuffer, x, y, color);
-            }
-        }
-    }
-}
-
-void find_bounding_box(const Coords *points, const int points_len, Coords *out_points) {
+void findBoundingBox(const Coords *points, const int points_len, Coords *out_points) {
     int min_y = points[0].y;
     int max_y = points[0].y;
     int min_x = points[0].x;
@@ -183,7 +137,7 @@ double signedTriangleArea(const Coords *a, const Coords *b, const Coords *c) {
      return 0.5 * ((b->y - a->y)*(b->x + a->x) + (c->y - b->y)*(c->x + b->x) + (a->y - c->y)*(a->x + c->x));
 }
 
-void drawTriangle2(TGAImage *framebuffer, int ax, int ay, int bx, int by, int cx, int cy, TGAColor *color) {
+void drawTriangle(TGAImage *framebuffer, int ax, int ay, int bx, int by, int cx, int cy, TGAColor *color) {
 #define POINTS_LEN 3
     Coords points[POINTS_LEN] = {
         {ax, ay},
@@ -192,9 +146,10 @@ void drawTriangle2(TGAImage *framebuffer, int ax, int ay, int bx, int by, int cx
     };
 
     double total_area = signedTriangleArea(&points[0], &points[1], &points[2]);
+    if (total_area < 1) return; // backface culling + discarding triangles that cover less than a pixel
 
     Coords box_points[2];
-    find_bounding_box(points, POINTS_LEN, box_points);
+    findBoundingBox(points, POINTS_LEN, box_points);
 
     for (int y = box_points[0].y; y <= box_points[1].y; y++) {
         for (int x = box_points[0].x; x <= box_points[1].x; x++) {
@@ -211,27 +166,13 @@ void drawTriangle2(TGAImage *framebuffer, int ax, int ay, int bx, int by, int cx
     }
 }
 
-TGAColor getRandColor() {
-    const int i = rand() % 4;
-    switch (i) {
-        case 0: {
-            return WHITE;
-        } break;
-        case 1: {
-            return GREEN;
-        } break;
-        case 2: {
-            return RED;
-        } break;
-        case 3: {
-            return BLUE;
-        } break;
-        case 4: {
-            return YELLOW;
-        } break;
+static inline TGAColor getRandColor() {
+    TGAColor rand_color;
+    for (int i = 0; i < 3; i++) {
+        rand_color.bgra[i] = rand() % 255;
     }
 
-    return WHITE;
+    return rand_color;
 }
 
 void drawObjModel(TGAImage *framebuffer, ObjModel *model) {
@@ -241,7 +182,7 @@ void drawObjModel(TGAImage *framebuffer, ObjModel *model) {
         ObjVertex *v3 = &model->vertices[model->faces[i].v3_index];
 
         TGAColor randColor = getRandColor();
-        drawTriangle2(
+        drawTriangle(
             framebuffer,
             toCenterScreen(v1->x, v1->z, WIDTH),
             toCenterScreen(v1->y, v1->z, HEIGHT),
@@ -257,14 +198,14 @@ void drawObjModel(TGAImage *framebuffer, ObjModel *model) {
         //drawLineVert(framebuffer, v3, v1, &RED);
     }
 
-    for (int i = 0; i < model->vertex_count; i++) {
-        tgaimage_set(
-            framebuffer,
-            toCenterScreen(model->vertices[i].x, model->vertices[i].z, WIDTH),
-            toCenterScreen(model->vertices[i].y, model->vertices[i].z, HEIGHT),
-            &WHITE
-        );
-    }
+   // for (int i = 0; i < model->vertex_count; i++) {
+   //     tgaimage_set(
+   //         framebuffer,
+   //         toCenterScreen(model->vertices[i].x, model->vertices[i].z, WIDTH),
+   //         toCenterScreen(model->vertices[i].y, model->vertices[i].z, HEIGHT),
+   //         &WHITE
+   //     );
+   // }
 }
 
 
@@ -286,7 +227,7 @@ int main() {
     };
 
     static ObjModel model;
-    char *filename = "./obj/diablo3_pose/diablo3_pose.obj";
+    char *filename = "./obj/african_head/african_head.obj";
     if (loadObjModelFromFile(filename, &model)) {
         drawObjModel(&framebuffer, &model);
     }
