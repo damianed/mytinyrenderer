@@ -7,8 +7,8 @@
 #include <ctype.h>
 #include "tga_image.h"
 
-#define WIDTH  1080
-#define HEIGHT 1080
+#define WIDTH  64
+#define HEIGHT 64
 
 static TGAColor WHITE   = {{255, 255, 255, 255}}; // attention, BGRA order
 static TGAColor GREEN   = {{  0, 255,   0, 255}};
@@ -137,7 +137,7 @@ double signedTriangleArea(const Coords *a, const Coords *b, const Coords *c) {
      return 0.5 * ((b->y - a->y)*(b->x + a->x) + (c->y - b->y)*(c->x + b->x) + (a->y - c->y)*(a->x + c->x));
 }
 
-void drawTriangle(TGAImage *framebuffer, int ax, int ay, int bx, int by, int cx, int cy, TGAColor *color) {
+void drawTriangle(TGAImage *framebuffer, int ax, int ay, int az, int bx, int by, int bz, int cx, int cy, int cz) {
 #define POINTS_LEN 3
     Coords points[POINTS_LEN] = {
         {ax, ay},
@@ -161,7 +161,9 @@ void drawTriangle(TGAImage *framebuffer, int ax, int ay, int bx, int by, int cx,
                 continue;
             }
 
-            tgaimage_set(framebuffer, x, y, color);
+            //uint8_t z = (alpha * az + beta * bz + gamma * cz);
+            TGAColor color = {{alpha * az, beta * bz, gamma * cz, 0}};
+            tgaimage_set(framebuffer, x, y, &color);
         }
     }
 }
@@ -181,17 +183,18 @@ void drawObjModel(TGAImage *framebuffer, ObjModel *model) {
         ObjVertex *v2 = &model->vertices[model->faces[i].v2_index];
         ObjVertex *v3 = &model->vertices[model->faces[i].v3_index];
 
-        TGAColor randColor = getRandColor();
-        drawTriangle(
-            framebuffer,
-            toCenterScreen(v1->x, v1->z, WIDTH),
-            toCenterScreen(v1->y, v1->z, HEIGHT),
-            toCenterScreen(v2->x, v2->z, WIDTH),
-            toCenterScreen(v2->y, v2->z, HEIGHT),
-            toCenterScreen(v3->x, v3->z, WIDTH),
-            toCenterScreen(v3->y, v3->z, HEIGHT),
-            &randColor
-        );
+        //TODO: update this
+        //TGAColor randColor = getRandColor();
+        //drawTriangle(
+        //    framebuffer,
+        //    toCenterScreen(v1->x, v1->z, WIDTH),
+        //    toCenterScreen(v1->y, v1->z, HEIGHT),
+        //    toCenterScreen(v2->x, v2->z, WIDTH),
+        //    toCenterScreen(v2->y, v2->z, HEIGHT),
+        //    toCenterScreen(v3->x, v3->z, WIDTH),
+        //    toCenterScreen(v3->y, v3->z, HEIGHT),
+        //    &randColor
+        //);
 
         //drawLineVert(framebuffer, v1, v2, &RED);
         //drawLineVert(framebuffer, v2, v3, &RED);
@@ -226,13 +229,16 @@ int main() {
         HEIGHT,
     };
 
-    static ObjModel model;
-    char *filename = "./obj/african_head/african_head.obj";
-    if (loadObjModelFromFile(filename, &model)) {
-        drawObjModel(&framebuffer, &model);
-    }
+    //static ObjModel model;
+    //char *filename = "./obj/african_head/african_head.obj";
+    //if (loadObjModelFromFile(filename, &model)) {
+    //    drawObjModel(&framebuffer, &model);
+    //}
 
-    //drawTriangle2(&framebuffer,   7, 45, 35, 100, 45,  60, &RED);
+    int ax = 17, ay =  4, az = 255;
+    int bx = 55, by = 39, bz = 255;
+    int cx = 23, cy = 59, cz = 255;
+    drawTriangle(&framebuffer, ax, ay, az, bx, by, bz, cx, cy, cz);
     //drawTriangle2(&framebuffer, 120, 35, 90,   5, 45, 110, &WHITE);
     //drawTriangle2(&framebuffer, 115, 83, 80,  90, 85, 120, &GREEN);
 
