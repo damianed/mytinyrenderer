@@ -7,8 +7,8 @@
 #include <ctype.h>
 #include "tga_image.h"
 
-#define WIDTH  64
-#define HEIGHT 64
+#define WIDTH  1920
+#define HEIGHT 1080
 
 static TGAColor WHITE   = {{255, 255, 255, 255}}; // attention, BGRA order
 static TGAColor GREEN   = {{  0, 255,   0, 255}};
@@ -137,7 +137,7 @@ double signedTriangleArea(const Coords *a, const Coords *b, const Coords *c) {
      return 0.5 * ((b->y - a->y)*(b->x + a->x) + (c->y - b->y)*(c->x + b->x) + (a->y - c->y)*(a->x + c->x));
 }
 
-void drawTriangle(TGAImage *framebuffer, int ax, int ay, int az, int bx, int by, int bz, int cx, int cy, int cz) {
+void drawTriangle(TGAImage *framebuffer, TGAImage *depthbuffer, int ax, int ay, int az, int bx, int by, int bz, int cx, int cy, int cz, TGAColor *color) {
 #define POINTS_LEN 3
     Coords points[POINTS_LEN] = {
         {ax, ay},
@@ -161,9 +161,19 @@ void drawTriangle(TGAImage *framebuffer, int ax, int ay, int az, int bx, int by,
                 continue;
             }
 
-            //uint8_t z = (alpha * az + beta * bz + gamma * cz);
-            TGAColor color = {{alpha * az, beta * bz, gamma * cz, 0}};
-            tgaimage_set(framebuffer, x, y, &color);
+            // Outline
+            //if (alpha > 0.05 && beta > 0.05 && gamma > 0.05) {
+            //    continue;
+            //}
+
+            uint8_t z = (alpha * az + beta * bz + gamma * cz);
+            //gradient color
+            //TGAColor color = {{alpha * az, beta * bz, gamma * cz, 0}};
+
+            if (z > depthbuffer->imageData.data[y * depthbuffer->width + x]) {
+                tgaimage_set(depthbuffer, x, y, &(TGAColor){{z}});
+                tgaimage_set(framebuffer, x, y, color);
+            }
         }
     }
 }
@@ -177,24 +187,27 @@ static inline TGAColor getRandColor() {
     return rand_color;
 }
 
-void drawObjModel(TGAImage *framebuffer, ObjModel *model) {
+void drawObjModel(TGAImage *framebuffer, TGAImage *depthbuffer, ObjModel *model, int xoffset, int yoffset) {
     for (int i = 0; i < model->faces_count; i++) {
         ObjVertex *v1 = &model->vertices[model->faces[i].v1_index];
         ObjVertex *v2 = &model->vertices[model->faces[i].v2_index];
         ObjVertex *v3 = &model->vertices[model->faces[i].v3_index];
 
-        //TODO: update this
-        //TGAColor randColor = getRandColor();
-        //drawTriangle(
-        //    framebuffer,
-        //    toCenterScreen(v1->x, v1->z, WIDTH),
-        //    toCenterScreen(v1->y, v1->z, HEIGHT),
-        //    toCenterScreen(v2->x, v2->z, WIDTH),
-        //    toCenterScreen(v2->y, v2->z, HEIGHT),
-        //    toCenterScreen(v3->x, v3->z, WIDTH),
-        //    toCenterScreen(v3->y, v3->z, HEIGHT),
-        //    &randColor
-        //);
+        TGAColor randColor = getRandColor();
+        drawTriangle(
+            framebuffer,
+            depthbuffer,
+            toCenterScreen(v1->x, v1->z, WIDTH) + xoffset,
+            toCenterScreen(v1->y, v1->z, HEIGHT) + yoffset,
+            (v1->z + 1.0) * 255.0/2.0,
+            toCenterScreen(v2->x, v2->z, WIDTH) + xoffset,
+            toCenterScreen(v2->y, v2->z, HEIGHT) + yoffset,
+            (v2->z + 1.0) * 255.0/2.0,
+            toCenterScreen(v3->x, v3->z, WIDTH) + xoffset,
+            toCenterScreen(v3->y, v3->z, HEIGHT) + yoffset,
+            (v3->z + 1.0) * 255.0/2.0,
+            &randColor
+        );
 
         //drawLineVert(framebuffer, v1, v2, &RED);
         //drawLineVert(framebuffer, v2, v3, &RED);
@@ -222,23 +235,55 @@ int main() {
         data_size,
     };
 
+    int depth_size = WIDTH * HEIGHT;
+    uint8_t depth_data[WIDTH * HEIGHT] = {0};
+    TGAImageData depthimage = {
+        depth_data,
+        depth_size,
+    };
+
     TGAImage framebuffer = {
         imageData,
         RGB,
         WIDTH,
         HEIGHT,
     };
+    TGAImage depthbuffer = {
+        depthimage,
+        GRAYSCALE,
+        WIDTH,
+        HEIGHT
+    };
 
-    //static ObjModel model;
-    //char *filename = "./obj/african_head/african_head.obj";
-    //if (loadObjModelFromFile(filename, &model)) {
-    //    drawObjModel(&framebuffer, &model);
-    //}
+    int xoffset = 400;
+    static ObjModel model;
+    char *filename = "./obj/boggie/body.obj";
+    if (loadObjModelFromFile(filename, &model)) {
+        drawObjModel(&framebuffer, &depthbuffer, &model, xoffset, 0);
+    }
 
-    int ax = 17, ay =  4, az = 255;
-    int bx = 55, by = 39, bz = 255;
-    int cx = 23, cy = 59, cz = 255;
-    drawTriangle(&framebuffer, ax, ay, az, bx, by, bz, cx, cy, cz);
+    static ObjModel head;
+    filename = "./obj/boggie/head.obj";
+    if (loadObjModelFromFile(filename, &head)) {
+        drawObjModel(&framebuffer, &depthbuffer, &head, xoffset, 0);
+    }
+
+    static ObjModel african;
+    filename = "./obj/african_head/african_head.obj";
+    if (loadObjModelFromFile(filename, &african)) {
+        drawObjModel(&framebuffer, &depthbuffer, &african, 0, 0);
+    }
+
+    static ObjModel diablo;
+    filename = "./obj/diablo3_pose/diablo3_pose.obj";
+    if (loadObjModelFromFile(filename, &diablo)) {
+        drawObjModel(&framebuffer, &depthbuffer, &diablo, -xoffset, 0);
+    }
+
+    //int ax = 17, ay =  4, az = 255;
+    //int bx = 555, by = 399, bz = 255;
+    //int cx = 233, cy = 596, cz = 255;
+    //drawTriangle(&framebuffer, ax, ay, az, bx, by, bz, cx, cy, cz);
     //drawTriangle2(&framebuffer, 120, 35, 90,   5, 45, 110, &WHITE);
     //drawTriangle2(&framebuffer, 115, 83, 80,  90, 85, 120, &GREEN);
 
@@ -264,5 +309,6 @@ int main() {
     //}
 
     tgaimage_write_tga_file(&framebuffer, "framebuffer.tga");
+    tgaimage_write_tga_file(&depthbuffer, "depth.tga");
     return 0;
 }
