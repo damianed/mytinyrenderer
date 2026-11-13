@@ -92,3 +92,12 @@ err:
     fclose(out);
     return false;
 }
+
+Vec3 vec3MatrixMult(Vec3 vec, Matrix3 matrix) {
+    Vec3 result;
+    result.x = vec.x * matrix.rows[0][0] + vec.y * matrix.rows[0][1] + vec.z * matrix.rows[0][2];
+    result.y = vec.x * matrix.rows[1][0] + vec.y * matrix.rows[1][1] + vec.z * matrix.rows[1][2];
+    result.z = vec.x * matrix.rows[2][0] + vec.y * matrix.rows[2][1] + vec.z * matrix.rows[2][2];
+
+    return result;
+}

@@ -7,10 +7,7 @@
 #include <ctype.h>
 #include "tga_image.h"
 
-#define VECTOR_LIB_IMPLMENETATION
-#include "vectors.h"
-
-#define WIDTH  1920
+#define WIDTH  1080
 #define HEIGHT 1080
 
 static TGAColor WHITE   = {{255, 255, 255, 255}}; // attention, BGRA order
@@ -56,11 +53,21 @@ void drawLine(TGAImage *framebuffer, int ax, int ay, int bx, int by, TGAColor *c
     }
 }
 
-static inline float toCenterScreen(float value, float zvalue, int centerTo) {
-    return ((value / (zvalue + 3.5)) * HEIGHT) + centerTo/2.0f;
+static inline Vec3 project(Vec3 vector) {
+#define camera_dist 3.0f
+    return (Vec3) {
+        .x = vector.x / (1 - vector.z/camera_dist),
+        .y = vector.y / (1 - vector.z/camera_dist),
+        .z = vector.z
+    };
 }
 
-void drawLineVert(TGAImage *framebuffer, ObjVertex *v1, ObjVertex *v2, TGAColor *color) {
+static inline float toCenterScreen(float value, float zvalue, int centerTo) {
+    //return ((value / (zvalue + 3.5)) * HEIGHT) + centerTo/2.0f;
+    return ((1.0 + value) * HEIGHT)/2.0;
+}
+
+void drawLineVert(TGAImage *framebuffer, Vec3 *v1, Vec3 *v2, TGAColor *color) {
     drawLine(
             framebuffer,
             toCenterScreen(v1->x, v1->z, WIDTH),
@@ -190,25 +197,36 @@ static inline TGAColor getRandColor() {
     return rand_color;
 }
 
+static inline Vec3 rotateVertex(Vec3 vertex) {
+    double angle = M_PI/6.0;
+    Matrix3 matrix = {{
+        {cos(angle), 0, sin(angle)},
+        {0, 1, 0},
+        {-sin(angle), 0, cos(angle)}
+    }};
+
+    return vec3MatrixMult(vertex, matrix);
+}
+
 void drawObjModel(TGAImage *framebuffer, TGAImage *depthbuffer, ObjModel *model, int xoffset, int yoffset) {
     for (int i = 0; i < model->faces_count; i++) {
-        ObjVertex *v1 = &model->vertices[model->faces[i].v1_index];
-        ObjVertex *v2 = &model->vertices[model->faces[i].v2_index];
-        ObjVertex *v3 = &model->vertices[model->faces[i].v3_index];
+        Vec3 v1 = project(rotateVertex(model->vertices[model->faces[i].v1_index]));
+        Vec3 v2 = project(rotateVertex(model->vertices[model->faces[i].v2_index]));
+        Vec3 v3 = project(rotateVertex(model->vertices[model->faces[i].v3_index]));
 
         TGAColor randColor = getRandColor();
         drawTriangle(
             framebuffer,
             depthbuffer,
-            toCenterScreen(v1->x, v1->z, WIDTH) + xoffset,
-            toCenterScreen(v1->y, v1->z, HEIGHT) + yoffset,
-            (v1->z + 1.0) * 255.0/2.0,
-            toCenterScreen(v2->x, v2->z, WIDTH) + xoffset,
-            toCenterScreen(v2->y, v2->z, HEIGHT) + yoffset,
-            (v2->z + 1.0) * 255.0/2.0,
-            toCenterScreen(v3->x, v3->z, WIDTH) + xoffset,
-            toCenterScreen(v3->y, v3->z, HEIGHT) + yoffset,
-            (v3->z + 1.0) * 255.0/2.0,
+            toCenterScreen(v1.x, v1.z, WIDTH) + xoffset,
+            toCenterScreen(v1.y, v1.z, HEIGHT) + yoffset,
+            (v1.z + 1.0) * 255.0/2.0,
+            toCenterScreen(v2.x, v2.z, WIDTH) + xoffset,
+            toCenterScreen(v2.y, v2.z, HEIGHT) + yoffset,
+            (v2.z + 1.0) * 255.0/2.0,
+            toCenterScreen(v3.x, v3.z, WIDTH) + xoffset,
+            toCenterScreen(v3.y, v3.z, HEIGHT) + yoffset,
+            (v3.z + 1.0) * 255.0/2.0,
             &randColor
         );
 
@@ -232,14 +250,14 @@ int main() {
 #define bpp    3
 
     int data_size = WIDTH * HEIGHT * bpp;
-    uint8_t data[WIDTH * HEIGHT * bpp] = {0};
+    static uint8_t data[WIDTH * HEIGHT * bpp] = {0};
     TGAImageData imageData = {
         data,
         data_size,
     };
 
     int depth_size = WIDTH * HEIGHT;
-    uint8_t depth_data[WIDTH * HEIGHT] = {0};
+    static uint8_t depth_data[WIDTH * HEIGHT] = {0};
     TGAImageData depthimage = {
         depth_data,
         depth_size,
@@ -258,29 +276,29 @@ int main() {
         HEIGHT
     };
 
-    int xoffset = 400;
-    static ObjModel model;
-    char *filename = "./obj/boggie/body.obj";
-    if (loadObjModelFromFile(filename, &model)) {
-        drawObjModel(&framebuffer, &depthbuffer, &model, xoffset, 0);
-    }
+    //int xoffset = 400;
+    //static ObjModel model;
+    //char *filename = "./obj/boggie/body.obj";
+    //if (loadObjModelFromFile(filename, &model)) {
+    //    drawObjModel(&framebuffer, &depthbuffer, &model, xoffset, 0);
+    //}
 
-    static ObjModel head;
-    filename = "./obj/boggie/head.obj";
-    if (loadObjModelFromFile(filename, &head)) {
-        drawObjModel(&framebuffer, &depthbuffer, &head, xoffset, 0);
-    }
+    //static ObjModel head;
+    //filename = "./obj/boggie/head.obj";
+    //if (loadObjModelFromFile(filename, &head)) {
+    //    drawObjModel(&framebuffer, &depthbuffer, &head, xoffset, 0);
+    //}
 
-    static ObjModel african;
-    filename = "./obj/african_head/african_head.obj";
-    if (loadObjModelFromFile(filename, &african)) {
-        drawObjModel(&framebuffer, &depthbuffer, &african, 0, 0);
-    }
+    //static ObjModel african;
+    //char *filename = "./obj/african_head/african_head.obj";
+    //if (loadObjModelFromFile(filename, &african)) {
+    //    drawObjModel(&framebuffer, &depthbuffer, &african, 0, 0);
+    //}
 
     static ObjModel diablo;
-    filename = "./obj/diablo3_pose/diablo3_pose.obj";
+    char *filename = "./obj/diablo3_pose/diablo3_pose.obj";
     if (loadObjModelFromFile(filename, &diablo)) {
-        drawObjModel(&framebuffer, &depthbuffer, &diablo, -xoffset, 0);
+        drawObjModel(&framebuffer, &depthbuffer, &diablo, 0, 0);
     }
 
     //int ax = 17, ay =  4, az = 255;

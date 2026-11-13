@@ -13,10 +13,10 @@ typedef struct {
 } TGAColor;
 
 typedef struct {
-    float x;
-    float y;
-    float z;
-} ObjVertex;
+    double x;
+    double y;
+    double z;
+} Vec3;
 
 typedef struct {
     int v1_index;
@@ -24,10 +24,14 @@ typedef struct {
     int v3_index;
 } ObjFace;
 
+typedef struct {
+    double rows[3][3];
+} Matrix3;
+
 #define MAX_VERTICE_COUNT 5000
 #define MAX_FACE_COUNT    10000
 typedef struct {
-    ObjVertex vertices[MAX_VERTICE_COUNT];
+    Vec3 vertices[MAX_VERTICE_COUNT];
     ObjFace   faces[MAX_FACE_COUNT];
     int       vertex_count;
     int       faces_count;
@@ -65,3 +69,6 @@ typedef struct {
 void tgaimage_set(TGAImage *framebuffer, int x, int y, TGAColor *color);
 
 bool tgaimage_write_tga_file(TGAImage *framebuffer, char *image_path);
+
+Vec3 vec3MatrixMult(Vec3 vec, Matrix3 matrix);
+
