@@ -15,8 +15,20 @@ typedef struct {
 typedef struct {
     double x;
     double y;
+} Vec2;
+
+typedef struct {
+    double x;
+    double y;
     double z;
 } Vec3;
+
+typedef struct {
+    double x;
+    double y;
+    double z;
+    double w;
+} Vec4;
 
 typedef struct {
     int v1_index;
@@ -71,4 +83,11 @@ void tgaimage_set(TGAImage *framebuffer, int x, int y, TGAColor *color);
 bool tgaimage_write_tga_file(TGAImage *framebuffer, char *image_path);
 
 Vec3 vec3MatrixMult(Vec3 vec, Matrix3 matrix);
+
+Vec3 restVec3(Vec3 v1, Vec3 v2);
+double dot3(Vec3 v1, Vec3 v2);
+Vec3 normalizedVec3(Vec3 vec);
+Vec3 cross3(Vec3 v1, Vec3 v2);
+void mat4Mult(double result[4][4], const double a[4][4], const double b[4][4]);
+Vec4 vec4DivDouble(Vec4 vec, double d);
 

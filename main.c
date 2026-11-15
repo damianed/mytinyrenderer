@@ -6,6 +6,7 @@
 #include <string.h>
 #include <ctype.h>
 #include "tga_image.h"
+#include <float.h>
 
 #define WIDTH  1080
 #define HEIGHT 1080
@@ -16,10 +17,7 @@ static TGAColor RED     = {{  0,   0, 255, 255}};
 static TGAColor BLUE    = {{255, 128,  64, 255}};
 static TGAColor YELLOW  = {{  0, 200, 255, 255}};
 
-typedef struct {
-    int x;
-    int y;
-} Coords;
+double Viewport[4][4], Perspective[4][4], ModelView[4][4];
 
 void swapInts(int *a, int *b) {
     int tmp = *a;
@@ -53,27 +51,69 @@ void drawLine(TGAImage *framebuffer, int ax, int ay, int bx, int by, TGAColor *c
     }
 }
 
-static inline Vec3 project(Vec3 vector) {
-#define camera_dist 3.0f
-    return (Vec3) {
-        .x = vector.x / (1 - vector.z/camera_dist),
-        .y = vector.y / (1 - vector.z/camera_dist),
-        .z = vector.z
-    };
-}
-
-static inline float toCenterScreen(float value, float zvalue, int centerTo) {
+static inline float toCenterScreen(float value) {
     //return ((value / (zvalue + 3.5)) * HEIGHT) + centerTo/2.0f;
     return ((1.0 + value) * HEIGHT)/2.0;
+}
+
+void viewport(const int x, const int y, const int w, const int h) {
+    const double v[4][4] = {
+        {w/2.0, 0,     0,  x+w/2.0},
+        {0,     h/2.0, 0,  y+h/2.0},
+        {0,     0,     1,  0},
+        {0,     0,     0,  1}
+    };
+
+    for (int row = 0; row < 4; row++) {
+        for (int col = 0; col < 4; col++) {
+            Viewport[row][col] = v[row][col];
+        }
+    }
+}
+
+void perspective(const double f) {
+    double p[4][4] = {
+        {1, 0,  0,   0},
+        {0, 1,  0,   0},
+        {0, 0,  1,   0},
+        {0, 0, -1/f, 1}
+    };
+
+    for (int row = 0; row < 4; row++) {
+        for (int col = 0; col < 4; col++) {
+            Perspective[row][col] = p[row][col];
+        }
+    }
+}
+
+void lookat(const Vec3 eye, const Vec3 center, const Vec3 up) {
+    Vec3 n = normalizedVec3(restVec3(eye, center));
+    Vec3 l = normalizedVec3(cross3(up,n));
+    Vec3 m = normalizedVec3(cross3(n, l));
+    double a[4][4] = {
+        {l.x, l.y, l.z, 0},
+        {m.x, m.y, m.z, 0},
+        {n.x, n.y, n.z, 0},
+        {0,   0,   0,   1}
+    };
+
+    double b[4][4] = {
+        {1, 0, 0, -center.x},
+        {0, 1, 0, -center.y},
+        {0, 0, 1, -center.z},
+        {0, 0, 0,  1       }
+    };
+
+    mat4Mult(ModelView, a, b);
 }
 
 void drawLineVert(TGAImage *framebuffer, Vec3 *v1, Vec3 *v2, TGAColor *color) {
     drawLine(
             framebuffer,
-            toCenterScreen(v1->x, v1->z, WIDTH),
-            toCenterScreen(v1->y, v1->z, HEIGHT),
-            toCenterScreen(v2->x, v2->z, WIDTH),
-            toCenterScreen(v2->y, v2->z, HEIGHT),
+            toCenterScreen(v1->x),
+            toCenterScreen(v1->y),
+            toCenterScreen(v2->x),
+            toCenterScreen(v2->y),
             color
     );
 }
@@ -113,10 +153,11 @@ bool loadObjModelFromFile(char *filename, ObjModel *model) {
         }
     }
 
+    fclose(file);
     return true;
 }
 
-void findBoundingBox(const Coords *points, const int points_len, Coords *out_points) {
+void findBoundingBox(const Vec2 *points, const int points_len, Vec2 *out_points) {
     int min_y = points[0].y;
     int max_y = points[0].y;
     int min_x = points[0].x;
@@ -143,47 +184,121 @@ void findBoundingBox(const Coords *points, const int points_len, Coords *out_poi
     out_points[1].x = max_x;
 }
 
-double signedTriangleArea(const Coords *a, const Coords *b, const Coords *c) {
-     return 0.5 * ((b->y - a->y)*(b->x + a->x) + (c->y - b->y)*(c->x + b->x) + (a->y - c->y)*(a->x + c->x));
+//double signedTriangleArea(const Vec2 *a, const Vec2 *b, const Vec2 *c) {
+//     return 0.5 * ((b->y - a->y)*(b->x + a->x) + (c->y - b->y)*(c->x + b->x) + (a->y - c->y)*(a->x + c->x));
+//}
+
+Vec4 mat4MultVec4(double m[4][4], Vec4 v) {
+    return (Vec4) {
+        m[0][0]*v.x + m[0][1]*v.y + m[0][2]*v.z + m[0][3]*v.w,
+        m[1][0]*v.x + m[1][1]*v.y + m[1][2]*v.z + m[1][3]*v.w,
+        m[2][0]*v.x + m[2][1]*v.y + m[2][2]*v.z + m[2][3]*v.w,
+        m[3][0]*v.x + m[3][1]*v.y + m[3][2]*v.z + m[3][3]*v.w
+    };
 }
 
-void drawTriangle(TGAImage *framebuffer, TGAImage *depthbuffer, int ax, int ay, int az, int bx, int by, int bz, int cx, int cy, int cz, TGAColor *color) {
-#define POINTS_LEN 3
-    Coords points[POINTS_LEN] = {
-        {ax, ay},
-        {bx, by},
-        {cx, cy},
+Vec3 mat3MultVec3(double m[3][3], Vec3 v) {
+    return (Vec3) {
+        m[0][0]*v.x + m[0][1]*v.y + m[0][2]*v.z,
+        m[1][0]*v.x + m[1][1]*v.y + m[1][2]*v.z,
+        m[2][0]*v.x + m[2][1]*v.y + m[2][2]*v.z
+    };
+}
+
+double matrix3Det(const double m[3][3]) {
+    return m[0][0] * (m[1][1]*m[2][2] - m[1][2]*m[2][1])
+         - m[0][1] * (m[1][0]*m[2][2] - m[1][2]*m[2][0])
+         + m[0][2] * (m[1][0]*m[2][1] - m[1][1]*m[2][0]);
+}
+
+int matrix3InvertTranspose(double out[3][3], const double m[3][3]) {
+    double c00 =  (m[1][1]*m[2][2] - m[1][2]*m[2][1]);
+    double c01 = -(m[1][0]*m[2][2] - m[1][2]*m[2][0]);
+    double c02 =  (m[1][0]*m[2][1] - m[1][1]*m[2][0]);
+
+    double c10 = -(m[0][1]*m[2][2] - m[0][2]*m[2][1]);
+    double c11 =  (m[0][0]*m[2][2] - m[0][2]*m[2][0]);
+    double c12 = -(m[0][0]*m[2][1] - m[0][1]*m[2][0]);
+
+    double c20 =  (m[0][1]*m[1][2] - m[0][2]*m[1][1]);
+    double c21 = -(m[0][0]*m[1][2] - m[0][2]*m[1][0]);
+    double c22 =  (m[0][0]*m[1][1] - m[0][1]*m[1][0]);
+
+    double det = m[0][0]*c00 + m[0][1]*c01 + m[0][2]*c02;
+    if (fabs(det) < 1e-12) return 0;
+
+    double inv = 1.0 / det;
+    out[0][0] = c00*inv; out[0][1] = c01*inv; out[0][2] = c02*inv;
+    out[1][0] = c10*inv; out[1][1] = c11*inv; out[1][2] = c12*inv;
+    out[2][0] = c20*inv; out[2][1] = c21*inv; out[2][2] = c22*inv;
+    return 1;
+}
+
+void rasterize(TGAImage *framebuffer, double *depthbuffer, Vec4 clip[3], TGAColor *color) {
+    Vec4 ndc[3]    = {
+        vec4DivDouble(clip[0], clip[0].w),
+        vec4DivDouble(clip[1], clip[1].w),
+        vec4DivDouble(clip[2], clip[2].w)
+    };
+    Vec2 screen[3];// = { (Viewport*ndc[0]).xy(), (Viewport*ndc[1]).xy(), (Viewport*ndc[2]).xy() }; // screen coordinates
+
+    Vec4 temp = mat4MultVec4(Viewport, ndc[0]);
+    screen[0] = (Vec2) {temp.x, temp.y};
+    temp = mat4MultVec4(Viewport, ndc[1]);
+    screen[1] = (Vec2) {temp.x, temp.y};
+    temp = mat4MultVec4(Viewport, ndc[2]);
+    screen[2] = (Vec2) {temp.x, temp.y};
+
+    double ABC[3][3] = {
+        {screen[0].x, screen[0].y, 1.0},
+        {screen[1].x, screen[1].y, 1.0},
+        {screen[2].x, screen[2].y, 1.0}
     };
 
-    double total_area = signedTriangleArea(&points[0], &points[1], &points[2]);
-    if (total_area < 1) return; // backface culling + discarding triangles that cover less than a pixel
+    if (matrix3Det(ABC) < 1) return; // backface culling + discarding triangles that cover less than a pixel
+                                                                                                 //
 
-    Coords box_points[2];
-    findBoundingBox(points, POINTS_LEN, box_points);
+    Vec2 box_points[2];
+    findBoundingBox(screen, 3, box_points);
+    int x_start = box_points[0].x < 0 ? 0 : (int)box_points[0].x;
+    int x_end   = box_points[1].x > framebuffer->width  - 1 ? framebuffer->width  - 1 : (int)box_points[1].x;
+    int y_start = box_points[0].y < 0 ? 0 : (int)box_points[0].y;
+    int y_end   = box_points[1].y > framebuffer->height - 1 ? framebuffer->height - 1 : (int)box_points[1].y;
 
-    for (int y = box_points[0].y; y <= box_points[1].y; y++) {
-        for (int x = box_points[0].x; x <= box_points[1].x; x++) {
-            Coords p = {x, y};
-            double alpha = signedTriangleArea(&p, &points[1], &points[2]) / total_area;
-            double beta  = signedTriangleArea(&p, &points[2], &points[0]) / total_area;
-            double gamma = signedTriangleArea(&p, &points[0], &points[1]) / total_area;
-            if (alpha < 0 || beta < 0 || gamma < 0) {
-                continue;
+
+    for (int y = y_start; y <= y_end; y++) {
+        for (int x = x_start; x <= x_end; x++) {
+            double inverted[3][3];
+            matrix3InvertTranspose(inverted, ABC);
+            Vec3 bc = mat3MultVec3(inverted, (Vec3){(double)(x), (double)(y), 1.0}); // barycentric coordinates of {x,y} w.r.t the triangle
+            if (bc.x < 0 || bc.y < 0 || bc.z < 0) continue;                                                    // negative barycentric coordinate => the pixel is outside the triangle
+            double z = dot3(bc, (Vec3){ ndc[0].z, ndc[1].z, ndc[2].z });
+            if (z > depthbuffer[y * framebuffer->width + x]) {
+                depthbuffer[y * framebuffer->width + x] = z;
+                tgaimage_set(framebuffer, x, y, color);
             }
 
-            // Outline
-            //if (alpha > 0.05 && beta > 0.05 && gamma > 0.05) {
+            //Vec2 p = {x, y};
+            //double alpha = signedTriangleArea(&p, &points[1], &points[2]) / total_area;
+            //double beta  = signedTriangleArea(&p, &points[2], &points[0]) / total_area;
+            //double gamma = signedTriangleArea(&p, &points[0], &points[1]) / total_area;
+            //if (alpha < 0 || beta < 0 || gamma < 0) {
             //    continue;
             //}
 
-            uint8_t z = (alpha * az + beta * bz + gamma * cz);
-            //gradient color
-            //TGAColor color = {{alpha * az, beta * bz, gamma * cz, 0}};
+            //// Outline
+            ////if (alpha > 0.05 && beta > 0.05 && gamma > 0.05) {
+            ////    continue;
+            ////}
 
-            if (z > depthbuffer->imageData.data[y * depthbuffer->width + x]) {
-                tgaimage_set(depthbuffer, x, y, &(TGAColor){{z}});
-                tgaimage_set(framebuffer, x, y, color);
-            }
+            //uint8_t z = (alpha * clip[0].z + beta * clip[1].z + gamma * clip[2].z);
+            ////gradient color
+            ////TGAColor color = {{alpha * az, beta * bz, gamma * cz, 0}};
+
+            //if (z > depthbuffer->imageData.data[y * depthbuffer->width + x]) {
+            //    tgaimage_set(depthbuffer, x, y, &(TGAColor){{z}});
+            //    tgaimage_set(framebuffer, x, y, color);
+            //}
         }
     }
 }
@@ -197,57 +312,47 @@ static inline TGAColor getRandColor() {
     return rand_color;
 }
 
-static inline Vec3 rotateVertex(Vec3 vertex) {
-    double angle = M_PI/6.0;
-    Matrix3 matrix = {{
-        {cos(angle), 0, sin(angle)},
-        {0, 1, 0},
-        {-sin(angle), 0, cos(angle)}
-    }};
+Vec4 applyTransforms(Vec3 v) {
+    double result[4][4];
+    mat4Mult(result, Perspective, ModelView);
 
-    return vec3MatrixMult(vertex, matrix);
+    return (Vec4){
+        result[0][0]*v.x + result[0][1]*v.y + result[0][2]*v.z + result[0][3],
+        result[1][0]*v.x + result[1][1]*v.y + result[1][2]*v.z + result[1][3],
+        result[2][0]*v.x + result[2][1]*v.y + result[2][2]*v.z + result[2][3],
+        result[3][0]*v.x + result[3][1]*v.y + result[3][2]*v.z + result[3][3]
+    };
+
 }
 
-void drawObjModel(TGAImage *framebuffer, TGAImage *depthbuffer, ObjModel *model, int xoffset, int yoffset) {
+void drawObjModel(TGAImage *framebuffer, double *depthbuffer, ObjModel *model) {
     for (int i = 0; i < model->faces_count; i++) {
-        Vec3 v1 = project(rotateVertex(model->vertices[model->faces[i].v1_index]));
-        Vec3 v2 = project(rotateVertex(model->vertices[model->faces[i].v2_index]));
-        Vec3 v3 = project(rotateVertex(model->vertices[model->faces[i].v3_index]));
-
+        Vec4 clip[3];
+        clip[0] = applyTransforms(model->vertices[model->faces[i].v1_index]);
+        clip[1] = applyTransforms(model->vertices[model->faces[i].v2_index]);
+        clip[2] = applyTransforms(model->vertices[model->faces[i].v3_index]);
         TGAColor randColor = getRandColor();
-        drawTriangle(
+        rasterize(
             framebuffer,
             depthbuffer,
-            toCenterScreen(v1.x, v1.z, WIDTH) + xoffset,
-            toCenterScreen(v1.y, v1.z, HEIGHT) + yoffset,
-            (v1.z + 1.0) * 255.0/2.0,
-            toCenterScreen(v2.x, v2.z, WIDTH) + xoffset,
-            toCenterScreen(v2.y, v2.z, HEIGHT) + yoffset,
-            (v2.z + 1.0) * 255.0/2.0,
-            toCenterScreen(v3.x, v3.z, WIDTH) + xoffset,
-            toCenterScreen(v3.y, v3.z, HEIGHT) + yoffset,
-            (v3.z + 1.0) * 255.0/2.0,
+            clip,
             &randColor
         );
-
-        //drawLineVert(framebuffer, v1, v2, &RED);
-        //drawLineVert(framebuffer, v2, v3, &RED);
-        //drawLineVert(framebuffer, v3, v1, &RED);
     }
-
-   // for (int i = 0; i < model->vertex_count; i++) {
-   //     tgaimage_set(
-   //         framebuffer,
-   //         toCenterScreen(model->vertices[i].x, model->vertices[i].z, WIDTH),
-   //         toCenterScreen(model->vertices[i].y, model->vertices[i].z, HEIGHT),
-   //         &WHITE
-   //     );
-   // }
 }
 
 
 int main() {
 #define bpp    3
+
+    Vec3    eye = {-1, 0, 2}; // camera position
+    Vec3 center = {0,  0, 0};  // camera direction
+    Vec3     up = {0,  1, 0};  // camera up vector
+
+    lookat(eye, center, up);                              // build the ModelView   matrix
+    Vec3 rest = restVec3(eye,center);
+    perspective(dot3(rest, rest));                        // build the Perspective matrix
+    viewport(WIDTH/16, HEIGHT/16, WIDTH*7/8, HEIGHT*7/8); // build the Viewport    matrix
 
     int data_size = WIDTH * HEIGHT * bpp;
     static uint8_t data[WIDTH * HEIGHT * bpp] = {0};
@@ -256,25 +361,16 @@ int main() {
         data_size,
     };
 
-    int depth_size = WIDTH * HEIGHT;
-    static uint8_t depth_data[WIDTH * HEIGHT] = {0};
-    TGAImageData depthimage = {
-        depth_data,
-        depth_size,
-    };
-
     TGAImage framebuffer = {
         imageData,
         RGB,
         WIDTH,
         HEIGHT,
     };
-    TGAImage depthbuffer = {
-        depthimage,
-        GRAYSCALE,
-        WIDTH,
-        HEIGHT
-    };
+    static double depthbuffer[WIDTH * HEIGHT];
+    for (int i = 0; i < WIDTH * HEIGHT; i++) {
+        depthbuffer[i] = -DBL_MAX;
+    }
 
     //int xoffset = 400;
     //static ObjModel model;
@@ -298,38 +394,10 @@ int main() {
     static ObjModel diablo;
     char *filename = "./obj/diablo3_pose/diablo3_pose.obj";
     if (loadObjModelFromFile(filename, &diablo)) {
-        drawObjModel(&framebuffer, &depthbuffer, &diablo, 0, 0);
+        drawObjModel(&framebuffer, depthbuffer, &diablo);
     }
 
-    //int ax = 17, ay =  4, az = 255;
-    //int bx = 555, by = 399, bz = 255;
-    //int cx = 233, cy = 596, cz = 255;
-    //drawTriangle(&framebuffer, ax, ay, az, bx, by, bz, cx, cy, cz);
-    //drawTriangle2(&framebuffer, 120, 35, 90,   5, 45, 110, &WHITE);
-    //drawTriangle2(&framebuffer, 115, 83, 80,  90, 85, 120, &GREEN);
-
-    //int ax =  7, ay =  3;
-    //int bx = 12, by = 37;
-    //int cx = 62, cy = 53;
-
-    //drawLine(&framebuffer, ax, ay, bx, by, &BLUE);
-    //drawLine(&framebuffer, cx, cy, bx, by, &GREEN);
-    //drawLine(&framebuffer, cx, cy, ax, ay, &YELLOW);
-    //drawLine(&framebuffer, ax, ay, cx, cy, &RED);
-
-    //tgaimage_set(&framebuffer, ax, ay, &WHITE);
-    //tgaimage_set(&framebuffer, bx, by, &WHITE);
-    //tgaimage_set(&framebuffer, cx, cy, &WHITE);
-
-    //perf measuring
-    //srand(time(NULL));
-    //for (int i=0; i<(1<<24); i++) {
-    //    int ax = rand()%WIDTH, ay = rand()%HEIGHT;
-    //    int bx = rand()%WIDTH, by = rand()%HEIGHT;
-    //    drawLine(&framebuffer, ax, ay, bx, by, &(TGAColor){{ rand()%255, rand()%255, rand()%255, rand()%255 }});
-    //}
-
     tgaimage_write_tga_file(&framebuffer, "framebuffer.tga");
-    tgaimage_write_tga_file(&depthbuffer, "depth.tga");
+    //tgaimage_write_tga_file(&depthbuffer, "depth.tga");
     return 0;
 }

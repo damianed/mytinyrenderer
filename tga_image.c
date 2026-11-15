@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "tga_image.h"
 #include <string.h>
+#include <math.h>
 
 void tgaimage_set(TGAImage *framebuffer, int x, int y, TGAColor *c) {
     if (x < 0 || y < 0 ||
@@ -100,4 +101,56 @@ Vec3 vec3MatrixMult(Vec3 vec, Matrix3 matrix) {
     result.z = vec.x * matrix.rows[2][0] + vec.y * matrix.rows[2][1] + vec.z * matrix.rows[2][2];
 
     return result;
+}
+
+Vec3 restVec3(Vec3 v1, Vec3 v2) {
+    Vec3 result;
+    result.x = v1.x - v2.x;
+    result.y = v1.y - v2.y;
+    result.z = v1.z - v2.z;
+    return result;
+}
+
+double dot3(Vec3 v1, Vec3 v2) {
+    return v1.x * v2.x +
+           v1.y * v2.y +
+           v1.z * v2.z;
+}
+
+Vec3 normalizedVec3(Vec3 vec) {
+    double magnitud = sqrt(dot3(vec, vec));
+    return (Vec3) {
+        vec.x / magnitud,
+        vec.y / magnitud,
+        vec.z / magnitud
+    };
+}
+
+Vec3 cross3(Vec3 v1, Vec3 v2) {
+    Vec3 cross;
+    cross.x = v1.y*v2.z - v1.z*v2.y;
+    cross.y = v1.z*v2.x - v1.x*v2.z;
+    cross.z = v1.x*v2.y - v1.y*v2.x;
+
+    return cross;
+}
+
+void mat4Mult(double result[4][4], const double a[4][4], const double b[4][4]) {
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            result[i][j] = 0;
+            for (int k = 0; k < 4; k++) {
+                result[i][j] += a[i][k] * b[k][j];
+            }
+        }
+    }
+}
+
+Vec4 vec4DivDouble(Vec4 vec, double d) {
+    return (Vec4) {
+        vec.x / d,
+        vec.y / d,
+        vec.z / d,
+        vec.w / d,
+    };
 }
