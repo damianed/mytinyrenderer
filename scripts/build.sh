@@ -1,4 +1,4 @@
-PLATFORM_COMPILE_FILES="main.c tga_image.c"
+PLATFORM_COMPILE_FILES="main.c tga_image.c our_gl.c"
 PLATFORM_LINKER_FLAGS="-lm"
 
 GAME_COMPILE_FILES=""
