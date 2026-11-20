@@ -139,7 +139,13 @@ void findBoundingBox(const Vec2 *points, const int points_len, Vec2 *out_points)
     out_points[1].x = max_x;
 }
 
-void rasterize(TGAImage *framebuffer, double *depthbuffer, Vec4 clip[3], TGAColor *color) {
+void rasterize(
+        TGAImage *framebuffer,
+        double    *depthbuffer,
+        GL_Shader *shader,
+        bool     (*fragment) (GL_Shader *, const Vec3, TGAColor *color_out),
+        Triangle   clip
+) {
     Vec4 ndc[3]    = {
         vec4DivDouble(clip[0], clip[0].w),
         vec4DivDouble(clip[1], clip[1].w),
@@ -170,7 +176,7 @@ void rasterize(TGAImage *framebuffer, double *depthbuffer, Vec4 clip[3], TGAColo
     int y_start = box_points[0].y < 0 ? 0 : (int)box_points[0].y;
     int y_end   = box_points[1].y > framebuffer->height - 1 ? framebuffer->height - 1 : (int)box_points[1].y;
 
-
+    TGAColor color = {0};
     for (int y = y_start; y <= y_end; y++) {
         for (int x = x_start; x <= x_end; x++) {
             double inverted[3][3];
@@ -179,8 +185,12 @@ void rasterize(TGAImage *framebuffer, double *depthbuffer, Vec4 clip[3], TGAColo
             if (bc.x < 0 || bc.y < 0 || bc.z < 0) continue;                                                    // negative barycentric coordinate => the pixel is outside the triangle
             double z = dot3(bc, (Vec3){ ndc[0].z, ndc[1].z, ndc[2].z });
             if (z > depthbuffer[y * framebuffer->width + x]) {
+                bool discard = fragment(shader, bc, &color);
+                if (discard) {
+                    continue;
+                }
                 depthbuffer[y * framebuffer->width + x] = z;
-                tgaimage_set(framebuffer, x, y, color);
+                tgaimage_set(framebuffer, x, y, &color);
             }
         }
     }

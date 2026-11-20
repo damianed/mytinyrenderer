@@ -20,6 +20,24 @@ static TGAColor RED     = {{  0,   0, 255, 255}};
 static TGAColor BLUE    = {{255, 128,  64, 255}};
 static TGAColor YELLOW  = {{  0, 200, 255, 255}};
 
+Vec4 vertex(GL_Shader *shader, const int face, const int vert) {
+    Vec3    *vertices = shader->model->vertices;
+    ObjFace *faces = shader->model->faces;
+
+    Vec3 v = vertices[faces[face].vert_indexes[vert]];
+
+    Vec4 gl_position = mat4MultVec4(ModelView, (Vec4) {v.x, v.y, v.z, 1});
+
+    shader->tri[vert] = (Vec3) {gl_position.x, gl_position.y, gl_position.z};
+
+    return mat4MultVec4(Perspective, gl_position);
+}
+
+bool fragment(GL_Shader *shader, const Vec3 bar, TGAColor *color_out) {
+    *color_out = shader->color;
+    return false;
+}
+
 void swapInts(int *a, int *b) {
     int tmp = *a;
     *a = *b;
@@ -96,9 +114,9 @@ bool loadObjModelFromFile(char *filename, ObjModel *model) {
             int index2 = atoi(start);
             while (!isspace(*start++)) {}
             int index3 = atoi(start);
-            model->faces[model->faces_count].v1_index = index1 - 1;
-            model->faces[model->faces_count].v2_index = index2 - 1;
-            model->faces[model->faces_count].v3_index = index3 - 1;
+            model->faces[model->faces_count].vert_indexes[0] = index1 - 1;
+            model->faces[model->faces_count].vert_indexes[1] = index2 - 1;
+            model->faces[model->faces_count].vert_indexes[2] = index3 - 1;
             model->faces_count++;
         }
     }
@@ -121,17 +139,22 @@ static inline TGAColor getRandColor() {
 }
 
 void drawObjModel(TGAImage *framebuffer, double *depthbuffer, ObjModel *model) {
+
+    GL_Shader shader = {.model = model};
     for (int i = 0; i < model->faces_count; i++) {
-        Vec4 clip[3];
-        clip[0] = applyTransforms(model->vertices[model->faces[i].v1_index]);
-        clip[1] = applyTransforms(model->vertices[model->faces[i].v2_index]);
-        clip[2] = applyTransforms(model->vertices[model->faces[i].v3_index]);
-        TGAColor randColor = getRandColor();
+        shader.color = getRandColor();
+        Triangle clip = {
+            vertex(&shader, i, 0),
+            vertex(&shader, i, 1),
+            vertex(&shader, i, 2),
+        };
+
         rasterize(
             framebuffer,
             depthbuffer,
-            clip,
-            &randColor
+            &shader,
+            fragment,
+            clip
         );
     }
 }

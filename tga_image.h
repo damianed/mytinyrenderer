@@ -32,9 +32,7 @@ typedef struct {
 } Vec4;
 
 typedef struct {
-    int v1_index;
-    int v2_index;
-    int v3_index;
+    int vert_indexes[3];
 } ObjFace;
 
 typedef struct {
